@@ -10,35 +10,20 @@ export async function createSong(prevState: any, formData: FormData) {
   const { userId } = await auth();
   if (!userId) throw new Error("Unauthorized");
 
-  const songFile = formData.get('song') as File;
-  const coverFile = formData.get('coverImage') as File;
   const title = formData.get('title') as string;
   const album = formData.get('album') as string;
+  const songKey = formData.get('songKey') as string;
+  const coverKey = formData.get('coverKey') as string;
+  const coverUrl = formData.get('coverUrl') as string;
+  const songId = formData.get('songId') as string; // From client
 
-  const coverBuffer = Buffer.from(await coverFile.arrayBuffer());
-  const songBuffer = Buffer.from(await songFile.arrayBuffer());
+  if (!songKey || !coverKey || !songId) {
+    return { success: false, error: "Missing file keys" };
+  }
 
-  // Generate unique song ID for predictable S3 key
-  const songId = randomUUID();
-  const timestamp = Date.now();
-
-  // Create a clean song slug from title
-  const songSlug = title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/(^-|-$)/g, '');
-
-  // S3 key pattern: {processingId}-{slug}.ext (simpler, no userId in path)
-  const songKey = `${songId}-${songSlug}.${songFile.name.split('.').pop()}`;
-  const coverKey = `${timestamp}-${coverFile.name}`;
-
-  let coverUploaded = false;
+  let coverUploaded = true; // Files already uploaded by client
 
   try {
-    // Upload cover image first
-    const coverUrl = await uploadToS3(coverBuffer, coverKey, coverFile.type);
-    coverUploaded = true;
-
     // Create song record in Supabase with processingId
     // The Python processor will update songUrl and processing flag after processing
     const { data: songData, error: insertError } = await client
@@ -69,12 +54,7 @@ export async function createSong(prevState: any, formData: FormData) {
     }
 
     console.log("Song record created:", songData);
-
-    // Upload audio file to S3 temp bucket (will trigger SQS)
-    // The S3 key is just: {processingId}-{slug}.mp3
-    await uploadToS3(songBuffer, songKey, songFile.type);
-
-    console.log("Audio uploaded to S3 for processing:", songKey);
+    console.log("Audio already uploaded to S3 at:", songKey);
 
     revalidatePath('/dashboard');
     return {
@@ -87,9 +67,12 @@ export async function createSong(prevState: any, formData: FormData) {
     console.error("Create Song Error:", error);
 
     // Perform cleanup if cover was uploaded but operation failed
+    // Since client uploaded it, we should still try to clean it up
     if (coverUploaded) {
       console.log("Cleaning up cover image from S3 due to failure...");
       await deleteFromS3(coverKey);
+      // Ideally also clean up songKey
+      await deleteFromS3(songKey);
     }
 
     return {

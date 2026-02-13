@@ -1,6 +1,34 @@
 import { Upload } from "@aws-sdk/lib-storage";
 import { s3Client } from "./s3Client";
-import { DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+
+export async function getSignedUploadUrl(key: string, contentType: string): Promise<{ uploadUrl: string, publicUrl: string }> {
+  try {
+    const bucketName = process.env.NEXT_TEMP_BUCKET_NAME!;
+    const region = process.env.AWS_REGION || "ap-south-1";
+
+    const command = new PutObjectCommand({
+      Bucket: bucketName,
+      Key: key,
+      ContentType: contentType,
+    });
+
+    // Generate presigned URL valid for 15 minutes
+    const uploadUrl = await getSignedUrl(s3Client, command, { expiresIn: 900 });
+
+    // Construct public URL
+    const baseUrl = process.env.CDN_URL || `https://${bucketName}.s3.${region}.amazonaws.com`;
+    // Correctly encode the key to handle spaces and special characters
+    const encodedKey = key.split('/').map(segment => encodeURIComponent(segment)).join('/');
+    const publicUrl = `${baseUrl}/${encodedKey}`;
+
+    return { uploadUrl, publicUrl };
+  } catch (e) {
+    console.error("Presigned URL Error:", e);
+    throw new Error("Failed to generate upload URL.");
+  }
+}
 
 /**
  * Uploads a Buffer to S3 and returns the correct Regional Public/CDN URL
