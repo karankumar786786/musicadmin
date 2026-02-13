@@ -1,3 +1,4 @@
+"use server";
 import { auth } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
 import { uploadToS3, deleteFromS3 } from "@/lib/s3Util";
