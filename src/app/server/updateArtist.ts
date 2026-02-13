@@ -3,7 +3,7 @@
 import { auth } from '@clerk/nextjs/server';
 import { revalidatePath } from 'next/cache';
 import { client } from "@/lib/supabase";
-import { uploadToS3 } from "@/lib/s3Util";
+import { uploadToS3, deleteFromS3 } from "@/lib/s3Util";
 
 export async function updateArtist(prevState: any, formData: FormData) {
     const { userId } = await auth();
@@ -16,12 +16,15 @@ export async function updateArtist(prevState: any, formData: FormData) {
 
     const coverFile = formData.get('coverImage') as File;
     let coverUrl = null;
+    let coverKey = "";
+    let coverUploaded = false;
 
     try {
         if (coverFile && coverFile.size > 0) {
             const coverBuffer = Buffer.from(await coverFile.arrayBuffer());
-            const coverKey = `artists-${userId}-${Date.now()}-${coverFile.name}`;
+            coverKey = `artists-${userId}-${Date.now()}-${coverFile.name}`;
             coverUrl = await uploadToS3(coverBuffer, coverKey, coverFile.type);
+            coverUploaded = true;
         }
 
         const updates: any = {
@@ -39,6 +42,9 @@ export async function updateArtist(prevState: any, formData: FormData) {
 
         if (error) {
             console.error("Supabase Update Artist Error:", error);
+            if (error.code === '23505') {
+                throw new Error("An artist with this stage name already exists.");
+            }
             throw new Error(`Failed to update artist: ${error.message}`);
         }
 
@@ -47,6 +53,12 @@ export async function updateArtist(prevState: any, formData: FormData) {
         return { success: true, error: "" };
     } catch (error: any) {
         console.error("Update Artist Error:", error);
+
+        if (coverUploaded) {
+            console.log("Cleaning up updated artist cover image from S3 due to failure...");
+            await deleteFromS3(coverKey);
+        }
+
         return { success: false, error: error.message || "Failed to update artist" };
     }
 }

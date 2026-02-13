@@ -1,12 +1,11 @@
-"use server";
 import { auth } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
-import { uploadToS3 } from "@/lib/s3Util";
+import { uploadToS3, deleteFromS3 } from "@/lib/s3Util";
 import { client } from "@/lib/supabase";
 
-
-
 export async function createArtist(prevState: any, formData: FormData) {
+    let coverUploaded = false;
+    let coverKey = "";
     try {
         const { userId } = await auth();
         if (!userId) throw new Error("Unauthorized");
@@ -18,8 +17,9 @@ export async function createArtist(prevState: any, formData: FormData) {
 
         // Upload cover image to S3
         const coverBuffer = Buffer.from(await coverFile.arrayBuffer());
-        const coverKey = `artists-${userId}-${Date.now()}-${coverFile.name}`;
+        coverKey = `artists-${userId}-${Date.now()}-${coverFile.name}`;
         const coverUrl = await uploadToS3(coverBuffer, coverKey, coverFile.type);
+        coverUploaded = true;
 
         // Insert into Supabase
         const { error } = await client.from('artists').insert({
@@ -31,6 +31,9 @@ export async function createArtist(prevState: any, formData: FormData) {
 
         if (error) {
             console.error("Supabase Artist Error:", error);
+            if (error.code === '23505') {
+                throw new Error("An artist with this stage name already exists.");
+            }
             throw new Error(error.message);
         }
 
@@ -38,6 +41,12 @@ export async function createArtist(prevState: any, formData: FormData) {
         return { success: true, error: "" };
     } catch (error: any) {
         console.error("Create Artist Error:", error);
+
+        if (coverUploaded) {
+            console.log("Cleaning up artist cover image from S3 due to failure...");
+            await deleteFromS3(coverKey);
+        }
+
         return { success: false, error: error.message || "Failed to create artist" };
     }
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState, ChangeEvent } from "react";
 import { createSong } from "@/app/server/createSong";
 
 const initialState = {
@@ -13,6 +13,32 @@ export default function CreateSongForm() {
     createSong,
     initialState,
   );
+
+  const [title, setTitle] = useState("");
+  const [duration, setDuration] = useState("");
+
+  const handleSongChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Set title from filename
+      const fileName = file.name.split(".").slice(0, -1).join(".");
+      setTitle(fileName);
+
+      // Detect duration
+      const audio = new Audio();
+      const reader = new FileReader();
+
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          audio.src = event.target.result as string;
+          audio.addEventListener("loadedmetadata", () => {
+            setDuration(Math.round(audio.duration).toString());
+          });
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   return (
     <form
@@ -51,6 +77,8 @@ export default function CreateSongForm() {
           name="title"
           id="title"
           required
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
           className="w-full px-4 py-2 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 focus:ring-2 focus:ring-blue-500 outline-none"
           placeholder="Song Title"
         />
@@ -120,6 +148,8 @@ export default function CreateSongForm() {
             id="duration"
             required
             min="1"
+            value={duration}
+            onChange={(e) => setDuration(e.target.value)}
             className="w-full px-4 py-2 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 focus:ring-2 focus:ring-blue-500 outline-none"
             placeholder="e.g. 180"
           />
@@ -139,6 +169,7 @@ export default function CreateSongForm() {
           id="song"
           accept="audio/*"
           required
+          onChange={handleSongChange}
           className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 dark:file:bg-blue-900/30 dark:file:text-blue-300"
         />
       </div>

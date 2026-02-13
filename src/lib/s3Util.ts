@@ -1,5 +1,6 @@
 import { Upload } from "@aws-sdk/lib-storage";
 import { s3Client } from "./s3Client";
+import { DeleteObjectCommand } from "@aws-sdk/client-s3";
 
 /**
  * Uploads a Buffer to S3 and returns the correct Regional Public/CDN URL
@@ -17,7 +18,7 @@ export async function uploadToS3(buffer: Buffer, key: string, contentType: strin
         Body: buffer,
         ContentType: contentType,
       },
-      queueSize: 4, 
+      queueSize: 4,
       partSize: 1024 * 1024 * 5, // 5MB parts
     });
 
@@ -33,9 +34,26 @@ export async function uploadToS3(buffer: Buffer, key: string, contentType: strin
 
     // 3. Use a forward slash as the separator
     return `${baseUrl}/${encodedKey}`;
-    
+
   } catch (e) {
     console.error("S3 Upload Error:", e);
     throw new Error("Failed to upload file to storage.");
+  }
+}
+
+/**
+ * Deletes an object from S3
+ */
+export async function deleteFromS3(key: string) {
+  try {
+    const bucketName = process.env.NEXT_TEMP_BUCKET_NAME!;
+    const command = new DeleteObjectCommand({
+      Bucket: bucketName,
+      Key: key,
+    });
+    await s3Client.send(command);
+    console.log(`Deleted object from S3: ${key}`);
+  } catch (e) {
+    console.error("S3 Delete Error:", e);
   }
 }
