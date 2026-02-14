@@ -6,7 +6,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 export async function getSignedUploadUrl(key: string, contentType: string): Promise<{ uploadUrl: string, publicUrl: string }> {
   try {
     const bucketName = process.env.NEXT_TEMP_BUCKET_NAME!;
-    const region = process.env.AWS_REGION || "ap-south-1";
+    const region = process.env.NEXT_AWS_REGION;
 
     const command = new PutObjectCommand({
       Bucket: bucketName,
@@ -36,7 +36,7 @@ export async function getSignedUploadUrl(key: string, contentType: string): Prom
 export async function uploadToS3(buffer: Buffer, key: string, contentType: string): Promise<string> {
   try {
     const bucketName = process.env.NEXT_TEMP_BUCKET_NAME!;
-    const region = process.env.AWS_REGION || "ap-south-1"; // Ensure region is set
+    const region = process.env.NEXT_AWS_REGION; // Ensure region is set
 
     const parallelUploads3 = new Upload({
       client: s3Client,
